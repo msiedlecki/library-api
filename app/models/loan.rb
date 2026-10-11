@@ -3,4 +3,6 @@ class Loan < ApplicationRecord
 
   belongs_to :book
   belongs_to :reader
+
+  scope :active, -> { where(returned_at: nil) }
 end

@@ -7,4 +7,6 @@ Rails.application.routes.draw do
 
   # Defines the root path route ("/")
   # root "posts#index"
+
+  resources :books, only: %i[ index show create ], param: :serial_number
 end
