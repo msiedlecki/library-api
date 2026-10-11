@@ -10,8 +10,52 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 0) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_11_093424) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
+  create_table "books", force: :cascade do |t|
+    t.string "serial_number", null: false
+    t.string "title", null: false
+    t.string "author", null: false
+    t.datetime "discarded_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["serial_number"], name: "index_books_on_serial_number", unique: true
+    t.check_constraint "length(TRIM(BOTH FROM author)) > 0", name: "books_author_not_blank"
+    t.check_constraint "length(TRIM(BOTH FROM title)) > 0", name: "books_title_not_blank"
+    t.check_constraint "serial_number::text ~ '^[0-9]{6}$'::text", name: "books_serial_number_format"
+  end
+
+  create_table "loans", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.bigint "reader_id", null: false
+    t.datetime "borrowed_at", null: false
+    t.date "due_on", null: false
+    t.datetime "returned_at"
+    t.datetime "reminder_3d_sent_at"
+    t.datetime "reminder_due_sent_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["book_id"], name: "index_loans_on_book_id"
+    t.index ["book_id"], name: "index_loans_one_active_per_book", unique: true, where: "(returned_at IS NULL)"
+    t.index ["due_on"], name: "index_loans_active_on_due_on", where: "(returned_at IS NULL)"
+    t.index ["reader_id"], name: "index_loans_on_reader_id"
+    t.check_constraint "returned_at IS NULL OR returned_at >= borrowed_at", name: "loans_returned_after_borrowed"
+  end
+
+  create_table "readers", force: :cascade do |t|
+    t.string "card_number", null: false
+    t.string "full_name", null: false
+    t.string "email", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index "lower((email)::text)", name: "index_readers_on_lower_email", unique: true
+    t.index ["card_number"], name: "index_readers_on_card_number", unique: true
+    t.index ["email"], name: "index_readers_on_email", unique: true
+    t.check_constraint "card_number::text ~ '^[0-9]{6}$'::text", name: "readers_card_number_format"
+  end
+
+  add_foreign_key "loans", "books", on_delete: :restrict
+  add_foreign_key "loans", "readers", on_delete: :restrict
 end
