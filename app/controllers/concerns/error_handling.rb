@@ -17,6 +17,7 @@ module ErrorHandling
     rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
     rescue_from ActiveRecord::RecordInvalid, with: :render_validation_failed
     rescue_from InvalidParams, with: :render_invalid_params
+    rescue_from Book::CurrentlyBorrowed, with: :render_currently_borrowed
   end
 
   private
@@ -48,5 +49,9 @@ module ErrorHandling
   def render_internal_error(error)
     Rails.logger.error("#{error.class}: #{error.message}\n#{Rails.backtrace_cleaner.clean(error.backtrace).join("\n")}")
     render_error(:internal_server_error, "internal_error", "Internal server error")
+  end
+
+  def render_currently_borrowed(error)
+    render_error(:conflict, "currently_borrowed", error.message)
   end
 end

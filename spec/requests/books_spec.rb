@@ -141,6 +141,37 @@ RSpec.describe "Books API", type: :request do
     end
   end
 
+  describe "DELETE /books/:serial_number" do
+    it "marks an active book as discarded and returns no content" do
+      book = create(:book, serial_number: "222222")
+
+      delete "/books/#{book.serial_number}"
+
+      expect(response).to have_http_status(:no_content)
+      expect(response.body).to eq("")
+      expect(book.reload.discarded_at).to be_present
+    end
+
+    it "returns not_found for a discarded book" do
+      create(:book, serial_number: "333333").update!(discarded_at: Time.current)
+
+      delete "/books/333333"
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body["error"]).to include("code" => "not_found")
+    end
+
+    it "returns conflict when a book is currently borrowed" do
+      book = create(:book, serial_number: "444444")
+      create(:loan, book: book, borrowed_at: 1.hour.ago)
+
+      delete "/books/#{book.serial_number}"
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body["error"]).to include("code" => "currently_borrowed")
+    end
+  end
+
   describe "POST /books" do
     let(:attributes) do
       { serial_number: "123456", title: "  The Hobbit  ", author: "  J. R. R. Tolkien  " }

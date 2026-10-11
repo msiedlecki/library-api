@@ -29,6 +29,11 @@ class BooksController < ApplicationController
     render json: ::BookSerializer.new(book), status: :created
   end
 
+  def destroy
+    Book.find_active!(params[:serial_number]).discard!
+    head :no_content
+  end
+
   private
 
   def book_params

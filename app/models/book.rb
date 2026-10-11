@@ -1,4 +1,6 @@
 class Book < ApplicationRecord
+  class CurrentlyBorrowed < StandardError; end
+
   SERIAL_FORMAT = /\A\d{6}\z/
 
   has_many :loans, dependent: :restrict_with_exception
@@ -24,5 +26,12 @@ class Book < ApplicationRecord
     raise ActiveRecord::RecordNotFound, "Book not found" unless serial_number.to_s.match?(SERIAL_FORMAT)
 
     active.find_by!(serial_number: serial_number)
+  end
+
+  def discard!
+    with_lock do
+      raise CurrentlyBorrowed if loans.active.exists?
+      update!(discarded_at: Time.current)
+    end
   end
 end
