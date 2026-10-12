@@ -172,6 +172,64 @@ RSpec.describe "Books API", type: :request do
     end
   end
 
+  describe "POST /books/:serial_number/borrow" do
+    it "creates a current loan and stores the reader data" do
+      book = create(:book, serial_number: "555555")
+
+      post "/books/#{book.serial_number}/borrow",
+           params: {
+             reader: {
+               card_number: "123456",
+               full_name: "Jane Doe",
+               email: "jane@example.com"
+             }
+           },
+           as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(response.parsed_body).to include(
+        "borrowed_at" => a_kind_of(String),
+        "due_on" => a_kind_of(String),
+        "reader" => include(
+          "card_number" => "123456",
+          "full_name" => "Jane Doe",
+          "email" => "jane@example.com"
+        )
+      )
+      expect(book.reload.active_loan).to be_present
+      expect(book.active_loan.reader.email).to eq("jane@example.com")
+    end
+
+    it "returns conflict when the book is already borrowed" do
+      book = create(:book, serial_number: "666666")
+      create(:loan, book: book, reader: create(:reader, card_number: "654321"), borrowed_at: 1.hour.ago)
+
+      post "/books/#{book.serial_number}/borrow",
+           params: { reader: { card_number: "123456", full_name: "Jane Doe", email: "jane@example.com" } },
+           as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body["error"]).to include("code" => "currently_borrowed")
+    end
+  end
+
+  describe "POST /books/:serial_number/return" do
+    it "marks the active loan as returned" do
+      book = create(:book, serial_number: "777777")
+      loan = create(:loan, book: book, borrowed_at: 2.days.ago, due_on: 30.days.from_now.to_date)
+
+      post "/books/#{book.serial_number}/return", as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "borrowed_at" => loan.borrowed_at.iso8601,
+        "returned_at" => a_kind_of(String),
+        "reader" => include("card_number" => loan.reader.card_number)
+      )
+      expect(book.reload.active_loan).to be_nil
+    end
+  end
+
   describe "POST /books" do
     let(:attributes) do
       { serial_number: "123456", title: "  The Hobbit  ", author: "  J. R. R. Tolkien  " }

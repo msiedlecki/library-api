@@ -28,6 +28,25 @@ class Book < ApplicationRecord
     active.find_by!(serial_number: serial_number)
   end
 
+  def borrow_for!(card_number:, full_name:, email:)
+    with_lock do
+      raise CurrentlyBorrowed, "Book is already borrowed" if active_loan.present?
+
+      reader = Reader.resolve!(card_number: card_number, full_name: full_name, email: email)
+      Loan.create!(book: self, reader: reader, borrowed_at: Time.current, due_on: Time.current.to_date + Loan::LOAN_PERIOD_DAYS)
+    end
+  end
+
+  def return!
+    with_lock do
+      loan = active_loan
+      raise ActiveRecord::RecordNotFound, "Loan not found" unless loan
+
+      loan.update!(returned_at: Time.current)
+      loan
+    end
+  end
+
   def discard!
     with_lock do
       raise CurrentlyBorrowed if loans.active.exists?

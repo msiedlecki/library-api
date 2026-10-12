@@ -16,6 +16,7 @@ module ErrorHandling
     rescue_from ActionDispatch::Http::Parameters::ParseError, with: :render_malformed_body
     rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
     rescue_from ActiveRecord::RecordInvalid, with: :render_validation_failed
+    rescue_from Reader::DataMismatch, with: :render_reader_data_mismatch
     rescue_from InvalidParams, with: :render_invalid_params
     rescue_from Book::CurrentlyBorrowed, with: :render_currently_borrowed
   end
@@ -53,5 +54,9 @@ module ErrorHandling
 
   def render_currently_borrowed(error)
     render_error(:conflict, "currently_borrowed", error.message)
+  end
+
+  def render_reader_data_mismatch(error)
+    render_error(:unprocessable_entity, "validation_failed", error.message)
   end
 end

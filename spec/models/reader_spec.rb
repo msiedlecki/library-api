@@ -34,4 +34,20 @@ RSpec.describe Reader, type: :model do
       expect(reader.email).to eq("frank@example.com")
     end
   end
+
+  describe ".resolve!" do
+    it "returns the existing reader when the card number matches and the identity is the same" do
+      reader = create(:reader, card_number: "123456", full_name: "Frank Herbert", email: "frank@example.com")
+
+      expect(described_class.resolve!(card_number: "123456", full_name: "Frank Herbert", email: "frank@example.com")).to eq(reader)
+    end
+
+    it "raises DataMismatch when the same card number belongs to a different person" do
+      create(:reader, card_number: "123456", full_name: "Frank Herbert", email: "frank@example.com")
+
+      expect do
+        described_class.resolve!(card_number: "123456", full_name: "Dune Reader", email: "reader@example.com")
+      end.to raise_error(Reader::DataMismatch)
+    end
+  end
 end
