@@ -1,0 +1,9 @@
+Hello <%= @reader.full_name %>,
+
+the book below is due in <%= pluralize(@days_left, "day") %> (<%= @loan.due_on %>):
+
+  "<%= @book.title %>" by <%= @book.author %>
+  serial number: <%= @book.serial_number %>
+
+Please return it on time.
+Library

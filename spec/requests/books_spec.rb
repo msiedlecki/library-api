@@ -231,7 +231,6 @@ RSpec.describe "Books API", type: :request do
           expect(body.dig("error", "details", "serial_number")).to include("is already taken or reserved")
         end
       end
-
     end
   end
 
