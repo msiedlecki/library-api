@@ -1,4 +1,4 @@
-require "rails_helper"
+require "swagger_helper"
 
 RSpec.describe "Books API", type: :request do
   describe "GET /books" do
@@ -9,8 +9,8 @@ RSpec.describe "Books API", type: :request do
 
       get "/books"
 
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to include(
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)).to include(
         "data" => [
           include("serial_number" => "000001", "title" => "First", "status" => "available", "current_loan" => nil),
           include("serial_number" => "000003", "title" => "Third", "status" => "available", "current_loan" => nil)
@@ -19,47 +19,48 @@ RSpec.describe "Books API", type: :request do
       )
     end
 
-    describe "status filter" do
-      let!(:available_book) { create(:book, serial_number: "000010") }
-      let!(:returned_book) do
-        create(:book, serial_number: "000011").tap do |book|
-          create(:loan, book: book, borrowed_at: 10.days.ago, returned_at: 1.day.ago)
-        end
+    it "returns only borrowed books with the current loan and reader" do
+      available_book = create(:book, serial_number: "000010")
+      returned_book = create(:book, serial_number: "000011").tap do |book|
+        create(:loan, book: book, borrowed_at: 10.days.ago, returned_at: 1.day.ago)
       end
-      let!(:borrowed_book) { create(:book, serial_number: "000012") }
-      let!(:loan) { create(:loan, book: borrowed_book) }
+      borrowed_book = create(:book, serial_number: "000012")
+      loan = create(:loan, book: borrowed_book)
 
-      it "returns only borrowed books with the current loan and reader" do
-        get "/books", params: { status: "borrowed" }
+      get "/books", params: { status: "borrowed" }
 
-        expect(response).to have_http_status(:ok)
-        expect(response.parsed_body["data"]).to match([
-          include(
-            "serial_number" => borrowed_book.serial_number,
-            "status" => "borrowed",
-            "current_loan" => {
-              "borrowed_at" => loan.borrowed_at.iso8601,
-              "due_on" => loan.due_on.iso8601,
-              "reader" => {
-                "card_number" => loan.reader.card_number,
-                "full_name" => loan.reader.full_name,
-                "email" => loan.reader.email
-              }
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)["data"]).to match([
+        include(
+          "serial_number" => borrowed_book.serial_number,
+          "status" => "borrowed",
+          "current_loan" => {
+            "borrowed_at" => loan.borrowed_at.iso8601,
+            "due_on" => loan.due_on.iso8601,
+            "reader" => {
+              "card_number" => loan.reader.card_number,
+              "full_name" => loan.reader.full_name,
+              "email" => loan.reader.email
             }
-          )
-        ])
-        expect(response.parsed_body.dig("meta", "total")).to eq(1)
-      end
-
-      it "returns books that are not currently borrowed as available" do
-        get "/books", params: { status: "available" }
-
-        expect(response).to have_http_status(:ok)
-        expect(response.parsed_body["data"].pluck("serial_number")).to eq(
-          [ available_book.serial_number, returned_book.serial_number ]
+          }
         )
-        expect(response.parsed_body.dig("meta", "total")).to eq(2)
+      ])
+      expect(JSON.parse(response.body).dig("meta", "total")).to eq(1)
+    end
+
+    it "returns books that are not currently borrowed as available" do
+      available_book = create(:book, serial_number: "000010")
+      returned_book = create(:book, serial_number: "000011").tap do |book|
+        create(:loan, book: book, borrowed_at: 10.days.ago, returned_at: 1.day.ago)
       end
+      borrowed_book = create(:book, serial_number: "000012")
+      create(:loan, book: borrowed_book)
+
+      get "/books", params: { status: "available" }
+
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)["data"].pluck("serial_number")).to eq([ available_book.serial_number, returned_book.serial_number ])
+      expect(JSON.parse(response.body).dig("meta", "total")).to eq(2)
     end
 
     it "returns the requested page with the real total" do
@@ -67,9 +68,9 @@ RSpec.describe "Books API", type: :request do
 
       get "/books", params: { page: "3", per_page: "2" }
 
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["meta"]).to eq("page" => 3, "per_page" => 2, "total" => 5)
-      expect(response.parsed_body["data"].pluck("serial_number")).to eq([ "000005" ])
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)["meta"]).to eq("page" => 3, "per_page" => 2, "total" => 5)
+      expect(JSON.parse(response.body)["data"].pluck("serial_number")).to eq([ "000005" ])
     end
 
     it "caps per_page at 100" do
@@ -77,16 +78,16 @@ RSpec.describe "Books API", type: :request do
 
       get "/books", params: { per_page: "101" }
 
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body.dig("meta", "per_page")).to eq(100)
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body).dig("meta", "per_page")).to eq(100)
     end
 
     it "returns details for every invalid list parameter" do
       get "/books", params: { status: "lost", page: "0", per_page: "many" }
 
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body.dig("error", "code")).to eq("invalid_params")
-      expect(response.parsed_body.dig("error", "details")).to eq(
+      expect(response.status).to eq(422)
+      expect(JSON.parse(response.body).dig("error", "code")).to eq("invalid_params")
+      expect(JSON.parse(response.body).dig("error", "details")).to eq(
         "status" => [ "must be one of: available, borrowed" ],
         "page" => [ "must be a positive integer" ],
         "per_page" => [ "must be a positive integer" ]
@@ -98,192 +99,303 @@ RSpec.describe "Books API", type: :request do
 
       get "/books"
 
-      expect(response).to have_http_status(:internal_server_error)
-      expect(response.parsed_body["error"]).to include("code" => "internal_error", "details" => {})
+      expect(response.status).to eq(500)
+      expect(JSON.parse(response.body)["error"]).to include("code" => "internal_error", "details" => {})
       expect(response.body).not_to include("secret db detail")
     end
   end
 
-  describe "GET /books/:serial_number" do
-    it "returns the current loan and the loan history, newest first" do
-      book = create(:book, serial_number: "123456")
-      returned_loan = create(:loan, book: book, borrowed_at: 2.days.ago, returned_at: 1.day.ago)
-      active_loan = create(:loan, book: book, borrowed_at: 1.hour.ago)
+  path "/books" do
+    post "registers a book" do
+      tags "Books"
+      consumes "application/json"
+      produces "application/json"
+      parameter name: :body, in: :body, required: true, schema: {
+        type: :object,
+        properties: {
+          serial_number: { type: :string },
+          title: { type: :string },
+          author: { type: :string }
+        },
+        required: %w[serial_number title author]
+      }
 
-      get "/books/#{book.serial_number}"
+      response "201", "creates a book" do
+        let(:body) do
+          { serial_number: "123456", title: "  The Hobbit  ", author: "  J. R. R. Tolkien  " }
+        end
 
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to include(
-        "serial_number" => book.serial_number,
-        "status" => "borrowed",
-        "current_loan" => include("reader" => include("card_number" => active_loan.reader.card_number)),
-        "loans" => [
-          include("borrowed_at" => active_loan.borrowed_at.iso8601, "returned_at" => nil),
-          include("borrowed_at" => returned_loan.borrowed_at.iso8601, "returned_at" => returned_loan.returned_at.iso8601)
-        ]
-      )
-    end
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(201)
+          expect(body).to include(
+            "serial_number" => "123456",
+            "title" => "The Hobbit",
+            "author" => "J. R. R. Tolkien",
+            "status" => "available",
+            "current_loan" => nil
+          )
+          expect(Book.find_by!(serial_number: "123456")).to be_persisted
+        end
+      end
 
-    it "returns not_found for a discarded book" do
-      create(:book, serial_number: "654321").update!(discarded_at: Time.current)
+      response "422", "returns validation details for invalid book attributes" do
+        let(:body) do
+          { serial_number: "invalid", title: " ", author: "J. R. R. Tolkien" }
+        end
 
-      get "/books/654321"
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(422)
+          expect(body.dig("error", "code")).to eq("validation_failed")
+          expect(body.dig("error", "details")).to include(
+            "serial_number" => [ "is invalid" ],
+            "title" => [ "can't be blank" ]
+          )
+        end
+      end
 
-      expect(response).to have_http_status(:not_found)
-      expect(response.parsed_body["error"]).to include("code" => "not_found", "details" => {})
-    end
+      response "422", "returns a validation error when the serial number is already registered" do
+        let(:body) do
+          { serial_number: "123456", title: "The Hobbit", author: "J. R. R. Tolkien" }
+        end
 
-    it "returns not_found for a malformed serial number" do
-      get "/books/abcdef"
+        before do
+          create(:book, serial_number: "123456")
+        end
 
-      expect(response).to have_http_status(:not_found)
-      expect(response.parsed_body.dig("error", "code")).to eq("not_found")
-    end
-  end
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(422)
+          expect(body.dig("error", "code")).to eq("validation_failed")
+          expect(body.dig("error", "details", "serial_number")).to include("is already taken or reserved")
+        end
+      end
 
-  describe "DELETE /books/:serial_number" do
-    it "marks an active book as discarded and returns no content" do
-      book = create(:book, serial_number: "222222")
+      response "422", "keeps the serial number of a discarded book reserved" do
+        let(:body) do
+          { serial_number: "123456", title: "The Hobbit", author: "J. R. R. Tolkien" }
+        end
 
-      delete "/books/#{book.serial_number}"
+        before do
+          create(:book, serial_number: "123456").update!(discarded_at: Time.current)
+        end
 
-      expect(response).to have_http_status(:no_content)
-      expect(response.body).to eq("")
-      expect(book.reload.discarded_at).to be_present
-    end
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(422)
+          expect(body.dig("error", "details", "serial_number")).to include("is already taken or reserved")
+        end
+      end
 
-    it "returns not_found for a discarded book" do
-      create(:book, serial_number: "333333").update!(discarded_at: Time.current)
-
-      delete "/books/333333"
-
-      expect(response).to have_http_status(:not_found)
-      expect(response.parsed_body["error"]).to include("code" => "not_found")
-    end
-
-    it "returns conflict when a book is currently borrowed" do
-      book = create(:book, serial_number: "444444")
-      create(:loan, book: book, borrowed_at: 1.hour.ago)
-
-      delete "/books/#{book.serial_number}"
-
-      expect(response).to have_http_status(:conflict)
-      expect(response.parsed_body["error"]).to include("code" => "currently_borrowed")
-    end
-  end
-
-  describe "POST /books/:serial_number/borrow" do
-    it "creates a current loan and stores the reader data" do
-      book = create(:book, serial_number: "555555")
-
-      post "/books/#{book.serial_number}/borrow",
-           params: {
-             reader: {
-               card_number: "123456",
-               full_name: "Jane Doe",
-               email: "jane@example.com"
-             }
-           },
-           as: :json
-
-      expect(response).to have_http_status(:created)
-      expect(response.parsed_body).to include(
-        "borrowed_at" => a_kind_of(String),
-        "due_on" => a_kind_of(String),
-        "reader" => include(
-          "card_number" => "123456",
-          "full_name" => "Jane Doe",
-          "email" => "jane@example.com"
-        )
-      )
-      expect(book.reload.active_loan).to be_present
-      expect(book.active_loan.reader.email).to eq("jane@example.com")
-    end
-
-    it "returns conflict when the book is already borrowed" do
-      book = create(:book, serial_number: "666666")
-      create(:loan, book: book, reader: create(:reader, card_number: "654321"), borrowed_at: 1.hour.ago)
-
-      post "/books/#{book.serial_number}/borrow",
-           params: { reader: { card_number: "123456", full_name: "Jane Doe", email: "jane@example.com" } },
-           as: :json
-
-      expect(response).to have_http_status(:conflict)
-      expect(response.parsed_body["error"]).to include("code" => "currently_borrowed")
     end
   end
 
-  describe "POST /books/:serial_number/return" do
-    it "marks the active loan as returned" do
-      book = create(:book, serial_number: "777777")
-      loan = create(:loan, book: book, borrowed_at: 2.days.ago, due_on: 30.days.from_now.to_date)
+  it "returns 400 bad_request for malformed JSON" do
+    post "/books", params: "{oops", headers: { "CONTENT_TYPE" => "application/json" }
 
-      post "/books/#{book.serial_number}/return", as: :json
+    expect(response.status).to eq(400)
+    expect(JSON.parse(response.body)["error"]).to include("code" => "bad_request", "details" => {})
+  end
 
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to include(
-        "borrowed_at" => loan.borrowed_at.iso8601,
-        "returned_at" => a_kind_of(String),
-        "reader" => include("card_number" => loan.reader.card_number)
-      )
-      expect(book.reload.active_loan).to be_nil
+  path "/books/{serial_number}" do
+    get "returns a book detail" do
+      tags "Books"
+      produces "application/json"
+      parameter name: :serial_number, in: :path, type: :string, required: true
+
+      response "200", "returns the current loan and the loan history" do
+        let(:serial_number) { "123456" }
+
+        before do
+          @book = create(:book, serial_number: "123456")
+          @returned_loan = create(:loan, book: @book, borrowed_at: 2.days.ago, returned_at: 1.day.ago)
+          @active_loan = create(:loan, book: @book, borrowed_at: 1.hour.ago)
+        end
+
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(200)
+          expect(body).to include(
+            "serial_number" => @book.serial_number,
+            "status" => "borrowed",
+            "current_loan" => include("reader" => include("card_number" => @active_loan.reader.card_number)),
+            "loans" => [
+              include("borrowed_at" => @active_loan.borrowed_at.iso8601, "returned_at" => nil),
+              include("borrowed_at" => @returned_loan.borrowed_at.iso8601, "returned_at" => @returned_loan.returned_at.iso8601)
+            ]
+          )
+        end
+      end
+
+      response "404", "returns not_found for a discarded book" do
+        let(:serial_number) { "654321" }
+
+        before do
+          create(:book, serial_number: "654321").update!(discarded_at: Time.current)
+        end
+
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(404)
+          expect(body["error"]).to include("code" => "not_found", "details" => {})
+        end
+      end
+
+      response "404", "returns not_found for a malformed serial number" do
+        let(:serial_number) { "abcdef" }
+
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(404)
+          expect(body.dig("error", "code")).to eq("not_found")
+        end
+      end
+    end
+
+    delete "marks a book as discarded" do
+      tags "Books"
+      parameter name: :serial_number, in: :path, type: :string, required: true
+
+      response "204", "marks an active book as discarded" do
+        let(:serial_number) { "222222" }
+
+        before do
+          @book = create(:book, serial_number: "222222")
+        end
+
+        run_test! do |response|
+          expect(response.status).to eq(204)
+          expect(response.body).to eq("")
+          expect(@book.reload.discarded_at).to be_present
+        end
+      end
+
+      response "404", "returns not_found for a discarded book" do
+        let(:serial_number) { "333333" }
+
+        before do
+          create(:book, serial_number: "333333").update!(discarded_at: Time.current)
+        end
+
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(404)
+          expect(body["error"]).to include("code" => "not_found")
+        end
+      end
+
+      response "409", "returns conflict when a book is currently borrowed" do
+        let(:serial_number) { "444444" }
+
+        before do
+          @book = create(:book, serial_number: "444444")
+          create(:loan, book: @book, borrowed_at: 1.hour.ago)
+        end
+
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(409)
+          expect(body["error"]).to include("code" => "currently_borrowed")
+        end
+      end
     end
   end
 
-  describe "POST /books" do
-    let(:attributes) do
-      { serial_number: "123456", title: "  The Hobbit  ", author: "  J. R. R. Tolkien  " }
+  path "/books/{serial_number}/borrow" do
+    post "creates a current loan" do
+      tags "Books"
+      consumes "application/json"
+      produces "application/json"
+      parameter name: :serial_number, in: :path, type: :string, required: true
+      parameter name: :body, in: :body, required: true, schema: {
+        type: :object,
+        properties: {
+          reader: {
+            type: :object,
+            properties: {
+              card_number: { type: :string },
+              full_name: { type: :string },
+              email: { type: :string }
+            },
+            required: %w[card_number full_name email]
+          }
+        },
+        required: %w[reader]
+      }
+
+      response "201", "creates a current loan and stores the reader data" do
+        let(:serial_number) { "555555" }
+        let(:body) do
+          { reader: { card_number: "123456", full_name: "Jane Doe", email: "jane@example.com" } }
+        end
+
+        before do
+          @book = create(:book, serial_number: "555555")
+        end
+
+        run_test! do |response|
+          parsed = JSON.parse(response.body)
+          expect(response.status).to eq(201)
+          expect(parsed).to include(
+            "borrowed_at" => a_kind_of(String),
+            "due_on" => a_kind_of(String),
+            "reader" => include(
+              "card_number" => "123456",
+              "full_name" => "Jane Doe",
+              "email" => "jane@example.com"
+            )
+          )
+          expect(@book.reload.active_loan).to be_present
+          expect(@book.active_loan.reader.email).to eq("jane@example.com")
+        end
+      end
+
+      response "409", "returns conflict when the book is already borrowed" do
+        let(:serial_number) { "666666" }
+        let(:body) do
+          { reader: { card_number: "123456", full_name: "Jane Doe", email: "jane@example.com" } }
+        end
+
+        before do
+          @book = create(:book, serial_number: "666666")
+          create(:loan, book: @book, reader: create(:reader, card_number: "654321"), borrowed_at: 1.hour.ago)
+        end
+
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(409)
+          expect(body["error"]).to include("code" => "currently_borrowed")
+        end
+      end
     end
+  end
 
-    it "registers a book and returns the normalized resource" do
-      post "/books", params: attributes, as: :json
+  path "/books/{serial_number}/return" do
+    post "marks the active loan as returned" do
+      tags "Books"
+      produces "application/json"
+      parameter name: :serial_number, in: :path, type: :string, required: true
 
-      expect(response).to have_http_status(:created)
-      expect(response.parsed_body).to include(
-        "serial_number" => "123456",
-        "title" => "The Hobbit",
-        "author" => "J. R. R. Tolkien",
-        "status" => "available",
-        "current_loan" => nil
-      )
-      expect(Book.find_by!(serial_number: "123456")).to be_persisted
-    end
+      response "200", "marks the active loan as returned" do
+        let(:serial_number) { "777777" }
 
-    it "returns validation details for invalid book attributes" do
-      post "/books", params: attributes.merge(serial_number: "invalid", title: " "), as: :json
+        before do
+          @book = create(:book, serial_number: "777777")
+          @loan = create(:loan, book: @book, borrowed_at: 2.days.ago, due_on: 30.days.from_now.to_date)
+        end
 
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body.dig("error", "code")).to eq("validation_failed")
-      expect(response.parsed_body.dig("error", "details")).to include(
-        "serial_number" => [ "is invalid" ],
-        "title" => [ "can't be blank" ]
-      )
-    end
-
-    it "returns a validation error when the serial number is already registered" do
-      create(:book, serial_number: attributes.fetch(:serial_number))
-
-      post "/books", params: attributes, as: :json
-
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body.dig("error", "code")).to eq("validation_failed")
-      expect(response.parsed_body.dig("error", "details", "serial_number")).to include("is already taken or reserved")
-    end
-
-    it "keeps the serial number of a discarded book reserved" do
-      create(:book, serial_number: attributes.fetch(:serial_number)).update!(discarded_at: Time.current)
-
-      post "/books", params: attributes, as: :json
-
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.parsed_body.dig("error", "details", "serial_number")).to include("is already taken or reserved")
-    end
-
-    it "returns 400 bad_request for malformed JSON" do
-      post "/books", params: "{oops", headers: { "CONTENT_TYPE" => "application/json" }
-
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body["error"]).to include("code" => "bad_request", "details" => {})
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(200)
+          expect(body).to include(
+            "borrowed_at" => @loan.borrowed_at.iso8601,
+            "returned_at" => a_kind_of(String),
+            "reader" => include("card_number" => @loan.reader.card_number)
+          )
+          expect(@book.reload.active_loan).to be_nil
+        end
+      end
     end
   end
 end

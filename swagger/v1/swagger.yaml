@@ -1,0 +1,124 @@
+---
+openapi: 3.0.1
+info:
+  title: API V1
+  version: v1
+paths:
+  "/books":
+    post:
+      summary: registers a book
+      tags:
+      - Books
+      parameters: []
+      responses:
+        '201':
+          description: creates a book
+        '422':
+          description: keeps the serial number of a discarded book reserved
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serial_number:
+                  type: string
+                title:
+                  type: string
+                author:
+                  type: string
+              required:
+              - serial_number
+              - title
+              - author
+        required: true
+  "/books/{serial_number}":
+    get:
+      summary: returns a book detail
+      tags:
+      - Books
+      parameters:
+      - name: serial_number
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: returns the current loan and the loan history
+        '404':
+          description: returns not_found for a malformed serial number
+    delete:
+      summary: marks a book as discarded
+      tags:
+      - Books
+      parameters:
+      - name: serial_number
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: marks an active book as discarded
+        '404':
+          description: returns not_found for a discarded book
+        '409':
+          description: returns conflict when a book is currently borrowed
+  "/books/{serial_number}/borrow":
+    post:
+      summary: creates a current loan
+      tags:
+      - Books
+      parameters:
+      - name: serial_number
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '201':
+          description: creates a current loan and stores the reader data
+        '409':
+          description: returns conflict when the book is already borrowed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reader:
+                  type: object
+                  properties:
+                    card_number:
+                      type: string
+                    full_name:
+                      type: string
+                    email:
+                      type: string
+                  required:
+                  - card_number
+                  - full_name
+                  - email
+              required:
+              - reader
+        required: true
+  "/books/{serial_number}/return":
+    post:
+      summary: marks the active loan as returned
+      tags:
+      - Books
+      parameters:
+      - name: serial_number
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: marks the active loan as returned
+servers:
+- url: http://{defaultHost}
+  variables:
+    defaultHost:
+      default: localhost:3000
