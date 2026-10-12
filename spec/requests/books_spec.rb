@@ -121,6 +121,16 @@ RSpec.describe "Books API", type: :request do
       }
 
       response "201", "creates a book" do
+        example "application/json", :book_created,
+          {
+            serial_number: "123456",
+            title: "The Hobbit",
+            author: "J. R. R. Tolkien",
+            status: "available",
+            current_loan: nil
+          },
+          "Book created"
+
         let(:body) do
           { serial_number: "123456", title: "  The Hobbit  ", author: "  J. R. R. Tolkien  " }
         end
@@ -140,6 +150,18 @@ RSpec.describe "Books API", type: :request do
       end
 
       response "422", "returns validation details for invalid book attributes" do
+        example "application/json", :invalid_book_attributes,
+          {
+            error: {
+              code: "validation_failed",
+              details: {
+                serial_number: [ "is invalid" ],
+                title: [ "can't be blank" ]
+              }
+            }
+          },
+          "Invalid book attributes"
+
         let(:body) do
           { serial_number: "invalid", title: " ", author: "J. R. R. Tolkien" }
         end
@@ -156,6 +178,17 @@ RSpec.describe "Books API", type: :request do
       end
 
       response "422", "returns a validation error when the serial number is already registered" do
+        example "application/json", :serial_number_taken,
+          {
+            error: {
+              code: "validation_failed",
+              details: {
+                serial_number: [ "is already taken or reserved" ]
+              }
+            }
+          },
+          "Serial number already taken"
+
         let(:body) do
           { serial_number: "123456", title: "The Hobbit", author: "J. R. R. Tolkien" }
         end
@@ -173,6 +206,17 @@ RSpec.describe "Books API", type: :request do
       end
 
       response "422", "keeps the serial number of a discarded book reserved" do
+        example "application/json", :discarded_serial_number_reserved,
+          {
+            error: {
+              code: "validation_failed",
+              details: {
+                serial_number: [ "is already taken or reserved" ]
+              }
+            }
+          },
+          "Discarded serial number reserved"
+
         let(:body) do
           { serial_number: "123456", title: "The Hobbit", author: "J. R. R. Tolkien" }
         end
@@ -205,6 +249,42 @@ RSpec.describe "Books API", type: :request do
       parameter name: :serial_number, in: :path, type: :string, required: true
 
       response "200", "returns the current loan and the loan history" do
+        example "application/json", :book_detail,
+          {
+            serial_number: "123456",
+            status: "borrowed",
+            current_loan: {
+              borrowed_at: "2026-10-01T10:00:00.000Z",
+              due_on: "2026-10-31",
+              reader: {
+                card_number: "1001",
+                full_name: "Jane Doe",
+                email: "jane@example.com"
+              }
+            },
+            loans: [
+              {
+                borrowed_at: "2026-10-01T10:00:00.000Z",
+                returned_at: nil,
+                reader: {
+                  card_number: "1001",
+                  full_name: "Jane Doe",
+                  email: "jane@example.com"
+                }
+              },
+              {
+                borrowed_at: "2026-09-30T10:00:00.000Z",
+                returned_at: "2026-10-01T09:00:00.000Z",
+                reader: {
+                  card_number: "1001",
+                  full_name: "Jane Doe",
+                  email: "jane@example.com"
+                }
+              }
+            ]
+          },
+          "Book detail"
+
         let(:serial_number) { "123456" }
 
         before do
@@ -228,27 +308,53 @@ RSpec.describe "Books API", type: :request do
         end
       end
 
-      response "404", "returns not_found for a discarded book" do
-        let(:serial_number) { "654321" }
+      response "404", "malformed serial_number or discarded book" do
+        example "application/json", :malformed_serial_number,
+          {
+            error: {
+              code: "not_found",
+              details: {}
+            }
+          },
+          "Malformed serial number"
 
-        before do
-          create(:book, serial_number: "654321").update!(discarded_at: Time.current)
+        example "application/json", :discarded_book,
+          {
+            error: {
+              code: "not_found",
+              details: {}
+            }
+          },
+          "Discarded book"
+
+        context "when serial number is malformed" do
+          let(:serial_number) { "abcdef" }
+
+          run_test! do |response|
+            body = JSON.parse(response.body)
+
+            expect(response.status).to eq(404)
+            expect(body.dig("error", "code")).to eq("not_found")
+          end
         end
 
-        run_test! do |response|
-          body = JSON.parse(response.body)
-          expect(response.status).to eq(404)
-          expect(body["error"]).to include("code" => "not_found", "details" => {})
-        end
-      end
+        context "when book is discarded" do
+          let(:serial_number) { "654321" }
 
-      response "404", "returns not_found for a malformed serial number" do
-        let(:serial_number) { "abcdef" }
+          before do
+            create(:book, serial_number: "654321")
+              .update!(discarded_at: Time.current)
+          end
 
-        run_test! do |response|
-          body = JSON.parse(response.body)
-          expect(response.status).to eq(404)
-          expect(body.dig("error", "code")).to eq("not_found")
+          run_test! do |response|
+            body = JSON.parse(response.body)
+
+            expect(response.status).to eq(404)
+            expect(body["error"]).to include(
+              "code" => "not_found",
+              "details" => {}
+            )
+          end
         end
       end
     end
@@ -258,6 +364,10 @@ RSpec.describe "Books API", type: :request do
       parameter name: :serial_number, in: :path, type: :string, required: true
 
       response "204", "marks an active book as discarded" do
+        example "application/json", :book_discarded_delete,
+          {},
+          "Book discarded"
+
         let(:serial_number) { "222222" }
 
         before do
@@ -272,6 +382,15 @@ RSpec.describe "Books API", type: :request do
       end
 
       response "404", "returns not_found for a discarded book" do
+        example "application/json", :discarded_book_delete,
+          {
+            error: {
+              code: "not_found",
+              details: {}
+            }
+          },
+          "Book discarded"
+
         let(:serial_number) { "333333" }
 
         before do
@@ -286,6 +405,15 @@ RSpec.describe "Books API", type: :request do
       end
 
       response "409", "returns conflict when a book is currently borrowed" do
+        example "application/json", :book_currently_borrowed_delete,
+          {
+            error: {
+              code: "currently_borrowed",
+              details: {}
+            }
+          },
+          "Book currently borrowed"
+
         let(:serial_number) { "444444" }
 
         before do
@@ -325,6 +453,18 @@ RSpec.describe "Books API", type: :request do
       }
 
       response "201", "creates a current loan and stores the reader data" do
+        example "application/json", :book_borrowed,
+          {
+            borrowed_at: "2026-10-12T08:00:00.000Z",
+            due_on: "2026-11-11",
+            reader: {
+              card_number: "123456",
+              full_name: "Jane Doe",
+              email: "jane@example.com"
+            }
+          },
+          "Book borrowed"
+
         let(:serial_number) { "555555" }
         let(:body) do
           { reader: { card_number: "123456", full_name: "Jane Doe", email: "jane@example.com" } }
@@ -352,6 +492,15 @@ RSpec.describe "Books API", type: :request do
       end
 
       response "409", "returns conflict when the book is already borrowed" do
+        example "application/json", :book_already_borrowed,
+          {
+            error: {
+              code: "currently_borrowed",
+              details: {}
+            }
+          },
+          "Book already borrowed"
+
         let(:serial_number) { "666666" }
         let(:body) do
           { reader: { card_number: "123456", full_name: "Jane Doe", email: "jane@example.com" } }
@@ -378,6 +527,18 @@ RSpec.describe "Books API", type: :request do
       parameter name: :serial_number, in: :path, type: :string, required: true
 
       response "200", "marks the active loan as returned" do
+        example "application/json", :loan_returned,
+          {
+            borrowed_at: "2026-10-10T10:00:00.000Z",
+            returned_at: "2026-10-12T10:00:00.000Z",
+            reader: {
+              card_number: "1001",
+              full_name: "Jane Doe",
+              email: "jane@example.com"
+            }
+          },
+          "Loan returned"
+
         let(:serial_number) { "777777" }
 
         before do
@@ -394,6 +555,56 @@ RSpec.describe "Books API", type: :request do
             "reader" => include("card_number" => @loan.reader.card_number)
           )
           expect(@book.reload.active_loan).to be_nil
+        end
+      end
+
+      response "404", "returns not_found when the book cannot be returned" do
+        example "application/json", :malformed_serial_number_return,
+          {
+            error: {
+              code: "not_found",
+              details: {}
+            }
+          },
+          "Malformed serial number"
+
+        example "application/json", :no_active_loan_return,
+          {
+            error: {
+              code: "not_found",
+              details: {}
+            }
+          },
+          "No active loan to return"
+
+        context "when serial number is malformed" do
+          let(:serial_number) { "abcdef" }
+
+          run_test! do |response|
+            body = JSON.parse(response.body)
+
+            expect(response.status).to eq(404)
+            expect(body.dig("error", "code")).to eq("not_found")
+          end
+        end
+
+        context "when the book has no active loan" do
+          let(:serial_number) { "888888" }
+
+          before do
+            @book = create(:book, serial_number: "888888")
+            create(:loan, book: @book, borrowed_at: 3.days.ago, returned_at: 1.day.ago)
+          end
+
+          run_test! do |response|
+            body = JSON.parse(response.body)
+
+            expect(response.status).to eq(404)
+            expect(body["error"]).to include(
+              "code" => "not_found",
+              "details" => {}
+            )
+          end
         end
       end
     end

@@ -13,8 +13,48 @@ paths:
       responses:
         '201':
           description: creates a book
+          content:
+            application/json:
+              examples:
+                book_created:
+                  value:
+                    serial_number: '123456'
+                    title: The Hobbit
+                    author: J. R. R. Tolkien
+                    status: available
+                    current_loan:
+                  summary: Book created
         '422':
           description: keeps the serial number of a discarded book reserved
+          content:
+            application/json:
+              examples:
+                invalid_book_attributes:
+                  value:
+                    error:
+                      code: validation_failed
+                      details:
+                        serial_number:
+                        - is invalid
+                        title:
+                        - can't be blank
+                  summary: Invalid book attributes
+                serial_number_taken:
+                  value:
+                    error:
+                      code: validation_failed
+                      details:
+                        serial_number:
+                        - is already taken or reserved
+                  summary: Serial number already taken
+                discarded_serial_number_reserved:
+                  value:
+                    error:
+                      code: validation_failed
+                      details:
+                        serial_number:
+                        - is already taken or reserved
+                  summary: Discarded serial number reserved
       requestBody:
         content:
           application/json:
@@ -46,8 +86,51 @@ paths:
       responses:
         '200':
           description: returns the current loan and the loan history
+          content:
+            application/json:
+              examples:
+                book_detail:
+                  value:
+                    serial_number: '123456'
+                    status: borrowed
+                    current_loan:
+                      borrowed_at: '2026-10-01T10:00:00.000Z'
+                      due_on: '2026-10-31'
+                      reader:
+                        card_number: '1001'
+                        full_name: Jane Doe
+                        email: jane@example.com
+                    loans:
+                    - borrowed_at: '2026-10-01T10:00:00.000Z'
+                      returned_at:
+                      reader:
+                        card_number: '1001'
+                        full_name: Jane Doe
+                        email: jane@example.com
+                    - borrowed_at: '2026-09-30T10:00:00.000Z'
+                      returned_at: '2026-10-01T09:00:00.000Z'
+                      reader:
+                        card_number: '1001'
+                        full_name: Jane Doe
+                        email: jane@example.com
+                  summary: Book detail
         '404':
-          description: returns not_found for a malformed serial number
+          description: malformed serial_number or discarded book
+          content:
+            application/json:
+              examples:
+                malformed_serial_number:
+                  value:
+                    error:
+                      code: not_found
+                      details: {}
+                  summary: Malformed serial number
+                discarded_book:
+                  value:
+                    error:
+                      code: not_found
+                      details: {}
+                  summary: Discarded book
     delete:
       summary: marks a book as discarded
       tags:
@@ -61,10 +144,33 @@ paths:
       responses:
         '204':
           description: marks an active book as discarded
+          content:
+            application/json:
+              examples:
+                book_discarded_delete:
+                  summary: Book discarded
         '404':
           description: returns not_found for a discarded book
+          content:
+            application/json:
+              examples:
+                discarded_book_delete:
+                  value:
+                    error:
+                      code: not_found
+                      details: {}
+                  summary: Book discarded
         '409':
           description: returns conflict when a book is currently borrowed
+          content:
+            application/json:
+              examples:
+                book_currently_borrowed_delete:
+                  value:
+                    error:
+                      code: currently_borrowed
+                      details: {}
+                  summary: Book currently borrowed
   "/books/{serial_number}/borrow":
     post:
       summary: creates a current loan
@@ -79,8 +185,29 @@ paths:
       responses:
         '201':
           description: creates a current loan and stores the reader data
+          content:
+            application/json:
+              examples:
+                book_borrowed:
+                  value:
+                    borrowed_at: '2026-10-12T08:00:00.000Z'
+                    due_on: '2026-11-11'
+                    reader:
+                      card_number: '123456'
+                      full_name: Jane Doe
+                      email: jane@example.com
+                  summary: Book borrowed
         '409':
           description: returns conflict when the book is already borrowed
+          content:
+            application/json:
+              examples:
+                book_already_borrowed:
+                  value:
+                    error:
+                      code: currently_borrowed
+                      details: {}
+                  summary: Book already borrowed
       requestBody:
         content:
           application/json:
@@ -117,6 +244,35 @@ paths:
       responses:
         '200':
           description: marks the active loan as returned
+          content:
+            application/json:
+              examples:
+                loan_returned:
+                  value:
+                    borrowed_at: '2026-10-10T10:00:00.000Z'
+                    returned_at: '2026-10-12T10:00:00.000Z'
+                    reader:
+                      card_number: '1001'
+                      full_name: Jane Doe
+                      email: jane@example.com
+                  summary: Loan returned
+        '404':
+          description: returns not_found when the book cannot be returned
+          content:
+            application/json:
+              examples:
+                malformed_serial_number_return:
+                  value:
+                    error:
+                      code: not_found
+                      details: {}
+                  summary: Malformed serial number
+                no_active_loan_return:
+                  value:
+                    error:
+                      code: not_found
+                      details: {}
+                  summary: No active loan to return
 servers:
 - url: http://{defaultHost}
   variables:
