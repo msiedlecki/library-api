@@ -4,6 +4,65 @@ info:
   title: API V1
   version: v1
 paths:
+  "/books/{serial_number}/borrow":
+    post:
+      summary: creates a current loan
+      tags:
+      - Books
+      parameters:
+      - name: serial_number
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '201':
+          description: creates a current loan and stores the reader data
+          content:
+            application/json:
+              examples:
+                book_borrowed:
+                  value:
+                    borrowed_at: '2026-10-12T08:00:00.000Z'
+                    due_on: '2026-11-11'
+                    reader:
+                      card_number: '123456'
+                      full_name: Jane Doe
+                      email: jane@example.com
+                  summary: Book borrowed
+        '409':
+          description: returns conflict when the book is already borrowed
+          content:
+            application/json:
+              examples:
+                book_already_borrowed:
+                  value:
+                    error:
+                      code: currently_borrowed
+                      details: {}
+                  summary: Book already borrowed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reader:
+                  type: object
+                  properties:
+                    card_number:
+                      type: string
+                    full_name:
+                      type: string
+                    email:
+                      type: string
+                  required:
+                  - card_number
+                  - full_name
+                  - email
+              required:
+              - reader
+        required: true
   "/books":
     post:
       summary: registers a book
@@ -72,7 +131,158 @@ paths:
               - title
               - author
         required: true
+    get:
+      summary: lists active books
+      tags:
+      - Books
+      responses:
+        '200':
+          description: caps per_page at 100
+          content:
+            application/json:
+              examples:
+                list_books_default:
+                  value:
+                    data:
+                    - serial_number: '000001'
+                      title: First
+                      status: available
+                      current_loan:
+                    - serial_number: '000003'
+                      title: Third
+                      status: available
+                      current_loan:
+                    meta:
+                      page: 1
+                      per_page: 25
+                      total: 2
+                  summary: List books
+                borrowed_books:
+                  value:
+                    data:
+                    - serial_number: '000012'
+                      status: borrowed
+                      current_loan:
+                        borrowed_at: '2026-10-12T08:00:00.000Z'
+                        due_on: '2026-11-11'
+                        reader:
+                          card_number: '1001'
+                          full_name: Jane Doe
+                          email: jane@example.com
+                    meta:
+                      page: 1
+                      per_page: 25
+                      total: 1
+                  summary: Borrowed books
+                available_books:
+                  value:
+                    data:
+                    - serial_number: '000010'
+                      title: Available
+                      status: available
+                      current_loan:
+                    - serial_number: '000011'
+                      title: Returned
+                      status: available
+                      current_loan:
+                    meta:
+                      page: 1
+                      per_page: 25
+                      total: 2
+                  summary: Available books
+                paged_books:
+                  value:
+                    data:
+                    - serial_number: '000005'
+                      title: Book 5
+                      status: available
+                      current_loan:
+                    meta:
+                      page: 3
+                      per_page: 2
+                      total: 5
+                  summary: Paginated books
+                per_page_capped:
+                  value:
+                    data:
+                    - serial_number: '000001'
+                      title: Book 1
+                      status: available
+                      current_loan:
+                    meta:
+                      page: 1
+                      per_page: 100
+                      total: 1
+                  summary: Per page capped
+        '422':
+          description: returns details for every invalid list parameter
+          content:
+            application/json:
+              examples:
+                invalid_list_params:
+                  value:
+                    error:
+                      code: invalid_params
+                      details:
+                        status:
+                        - 'must be one of: available, borrowed'
+                        page:
+                        - must be a positive integer
+                        per_page:
+                        - must be a positive integer
+                  summary: Invalid list parameters
+        '500':
+          description: returns 500 internal_error without leaking details
+          content:
+            application/json:
+              examples:
+                internal_error:
+                  value:
+                    error:
+                      code: internal_error
+                      details: {}
+                  summary: Internal error
   "/books/{serial_number}":
+    delete:
+      summary: marks a book as discarded
+      tags:
+      - Books
+      parameters:
+      - name: serial_number
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: marks an active book as discarded
+          content:
+            application/json:
+              examples:
+                book_discarded_delete:
+                  summary: Book discarded
+        '404':
+          description: returns not_found for a discarded book
+          content:
+            application/json:
+              examples:
+                discarded_book_delete:
+                  value:
+                    error:
+                      code: not_found
+                      details: {}
+                  summary: Book discarded
+        '409':
+          description: returns conflict when a book is currently borrowed
+          content:
+            application/json:
+              examples:
+                book_currently_borrowed_delete:
+                  value:
+                    error:
+                      code: currently_borrowed
+                      details: {}
+                  summary: Book currently borrowed
     get:
       summary: returns a book detail
       tags:
@@ -131,105 +341,6 @@ paths:
                       code: not_found
                       details: {}
                   summary: Discarded book
-    delete:
-      summary: marks a book as discarded
-      tags:
-      - Books
-      parameters:
-      - name: serial_number
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '204':
-          description: marks an active book as discarded
-          content:
-            application/json:
-              examples:
-                book_discarded_delete:
-                  summary: Book discarded
-        '404':
-          description: returns not_found for a discarded book
-          content:
-            application/json:
-              examples:
-                discarded_book_delete:
-                  value:
-                    error:
-                      code: not_found
-                      details: {}
-                  summary: Book discarded
-        '409':
-          description: returns conflict when a book is currently borrowed
-          content:
-            application/json:
-              examples:
-                book_currently_borrowed_delete:
-                  value:
-                    error:
-                      code: currently_borrowed
-                      details: {}
-                  summary: Book currently borrowed
-  "/books/{serial_number}/borrow":
-    post:
-      summary: creates a current loan
-      tags:
-      - Books
-      parameters:
-      - name: serial_number
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '201':
-          description: creates a current loan and stores the reader data
-          content:
-            application/json:
-              examples:
-                book_borrowed:
-                  value:
-                    borrowed_at: '2026-10-12T08:00:00.000Z'
-                    due_on: '2026-11-11'
-                    reader:
-                      card_number: '123456'
-                      full_name: Jane Doe
-                      email: jane@example.com
-                  summary: Book borrowed
-        '409':
-          description: returns conflict when the book is already borrowed
-          content:
-            application/json:
-              examples:
-                book_already_borrowed:
-                  value:
-                    error:
-                      code: currently_borrowed
-                      details: {}
-                  summary: Book already borrowed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                reader:
-                  type: object
-                  properties:
-                    card_number:
-                      type: string
-                    full_name:
-                      type: string
-                    email:
-                      type: string
-                  required:
-                  - card_number
-                  - full_name
-                  - email
-              required:
-              - reader
-        required: true
   "/books/{serial_number}/return":
     post:
       summary: marks the active loan as returned
