@@ -8,7 +8,7 @@ class BooksController < ApplicationController
     status, page, per_page = list_params
 
     scope = Book.active
-    scope = scope.public_send(status) if status   # status przeszedł whitelistę
+    scope = scope.public_send(status) if status
     total = scope.count
     books = scope.includes(active_loan: :reader)
                  .order(:serial_number, :id)
