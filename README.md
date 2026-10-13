@@ -11,6 +11,14 @@ docker compose up --build
 ```
 The Compose `web` service runs in development mode on port 3000 and connects to the PostgreSQL `db` service. At startup, it runs `bin/rails db:prepare` to prepare the database; Rails seeds it when it is first created.
 
+## Tests
+
+With the Compose stack running, execute:
+
+```sh
+docker compose exec -e RAILS_ENV=test web bundle exec rspec
+```
+
 ## API and Swagger UI
 
 The API is available at <http://localhost:3000>, with Swagger UI at <http://localhost:3000/api-docs>. The documentation covers the `/books` endpoints with response details and examples.
