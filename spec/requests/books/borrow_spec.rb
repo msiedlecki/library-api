@@ -88,6 +88,35 @@ RSpec.describe "Books API", type: :request do
           expect(body["error"]).to include("code" => "currently_borrowed")
         end
       end
+
+      response "404", "returns not found when the book has been discarded" do
+        example "application/json", :discarded_book,
+          {
+            error: {
+              code: "not_found",
+              details: {}
+            }
+          },
+          "Discarded book"
+
+        let(:serial_number) { "777777" }
+        let(:body) do
+          { reader: { card_number: "123456", full_name: "Jane Doe", email: "jane@example.com" } }
+        end
+
+        before do
+          create(:book, serial_number: "777777").update!(discarded_at: Time.current)
+        end
+
+        run_test! do |response|
+          body = JSON.parse(response.body)
+          expect(response.status).to eq(404)
+          expect(body["error"]).to include(
+            "code" => "not_found",
+            "details" => {}
+          )
+        end
+      end
     end
   end
 end

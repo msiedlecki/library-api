@@ -30,6 +30,7 @@ class Book < ApplicationRecord
 
   def borrow_for!(card_number:, full_name:, email:)
     with_lock do
+      raise ActiveRecord::RecordNotFound if discarded_at
       raise CurrentlyBorrowed, "Book is already borrowed" if active_loan.present?
 
       reader = Reader.resolve!(card_number: card_number, full_name: full_name, email: email)

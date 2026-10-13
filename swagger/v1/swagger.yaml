@@ -41,6 +41,17 @@ paths:
                       code: currently_borrowed
                       details: {}
                   summary: Book already borrowed
+        '404':
+          description: returns not found when the book has been discarded
+          content:
+            application/json:
+              examples:
+                discarded_book:
+                  value:
+                    error:
+                      code: not_found
+                      details: {}
+                  summary: Discarded book
       requestBody:
         content:
           application/json:
