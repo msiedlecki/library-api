@@ -52,7 +52,18 @@ COPY . .
 RUN bundle exec bootsnap precompile -j 1 app/ lib/
 
 
+# Development image used by Compose.
+FROM build AS development
 
+ENV RAILS_ENV="development" \
+    BUNDLE_DEPLOYMENT="0" \
+    BUNDLE_WITHOUT=""
+
+RUN bundle install
+
+ENTRYPOINT ["/rails/bin/docker-entrypoint"]
+EXPOSE 3000
+CMD ["sh", "-c", "./bin/rails db:prepare && exec ./bin/rails server -b 0.0.0.0 -p 3000"]
 
 # Final stage for app image
 FROM base
