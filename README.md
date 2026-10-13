@@ -41,4 +41,4 @@ The API is available at <http://localhost:3000>, with Swagger UI at <http://loca
 - The job does not send reminders for overdue loans, so a missed daily run is not caught up later.
 - After a reminder is queued, the app records a timestamp. If delivery later fails, that timestamp may prevent a retry.
 
-Beyond production configuration, possible future improvements include authentication, reader endpoints, loan extensions, overdue reminders, job monitoring, and service objects if the domain becomes more complex.
+Beyond production configuration, possible future improvements include authentication, reader endpoints, loan extensions, overdue reminders, job monitoring, and service objects if the domain becomes more complex, eager loading and N+1 logging and testing.
